@@ -1,0 +1,27 @@
+{
+    "name": "jaap/hypixel-api",
+    "type": "library",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "Jaap\\HypixelApi\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Jaap Elst",
+            "email": "jaapelst@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Jaap\\HypixelApi\\HypixelProvider"
+            ]
+        }
+    },
+    "require": {
+        "laravel/framework": "^8.83",
+        "guzzlehttp/guzzle": "^7.4"
+    }
+}
