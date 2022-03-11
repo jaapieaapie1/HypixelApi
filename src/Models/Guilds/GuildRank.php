@@ -6,7 +6,7 @@ use Carbon\CarbonImmutable;
 use Jaap\HypixelApi\Helpers\FromArray;
 use Jaap\HypixelApi\Models\HypixelModel;
 
-class GuildRank extends HypixelModel
+class GuildRank extends HypixelModel implements \Jaap\HypixelApi\Helpers\IFromArray
 {
     use FromArray;
 

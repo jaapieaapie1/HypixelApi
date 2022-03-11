@@ -19,12 +19,20 @@ class Guild extends HypixelModel
     /**
      * @var GuildMember[] members
      */
-    public array $members;
+    public array $members = [];
     /**
      * @var GuildRank[] ranks
      */
-    public array $ranks;
+    public array $ranks = [];
     public array $achievements;
     public int $exp;
     public array $guildExpByGameType;
+
+    public function parseMembers(array $data) {
+        $this->parseArray(GuildMember::class, $data, $this->members);
+    }
+
+    public function parseRanks(array $data) {
+        $this->parseArray(GuildRank::class, $data, $this->ranks);
+    }
 }

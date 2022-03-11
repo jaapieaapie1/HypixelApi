@@ -8,13 +8,15 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 use Jaap\HypixelApi\Events\InvalidApiKeyEvent;
 use Jaap\HypixelApi\Exceptions\RateLimitException;
+use Jaap\HypixelApi\Models\Resources\Achievements\Achievements;
 use Jaap\HypixelApi\Models\Friend;
 use Jaap\HypixelApi\Models\Guilds\Guild;
+use Jaap\HypixelApi\Models\RankedSkywarsStats;
 use Jaap\HypixelApi\Models\RecentGame;
+use Jaap\HypixelApi\Models\Resources\Challenges\Challenges;
 use Jaap\HypixelApi\Models\Session;
 use Jaap\HypixelApi\Responses\KeyInformationResponse;
 use Jaap\HypixelApi\Responses\PlayerResponse;
@@ -153,8 +155,8 @@ class Hypixel
      */
     public function getPlayer(UuidInterface $uuid = null): PlayerResponse
     {
-        if ($uuid === null)
-            $uuid = $this->getPlayersUuid();
+        $this->orDefaultUuid($uuid);
+
         return Cache::get('hypixel.player.' . $uuid->serialize(), function () use ($uuid) {
             $data = $this->makeRequest('/player', ['uuid' => $uuid->serialize()]);
             $player = $data['player'];
@@ -175,8 +177,7 @@ class Hypixel
      * @throws Exception
      */
     public function getFriends(UuidInterface $uuid = null): array {
-        if ($uuid === null)
-            $uuid = $this->getPlayersUuid();
+        $this->orDefaultUuid($uuid);
 
         return Cache::get('hypixel.friends.' . $uuid->serialize(), function () use ($uuid) {
              $data = $this->makeRequest('/friends', ['uuid' => $uuid->serialize()]);
@@ -201,8 +202,7 @@ class Hypixel
      * @throws Exception
      */
     public function getRecentGames(UuidInterface $uuid = null): array {
-        if ($uuid === null)
-            $uuid = $this->getPlayersUuid();
+        $this->orDefaultUuid($uuid);
 
         return Cache::get('hypixel.recentGames.' . $uuid->serialize(), function () use ($uuid) {
             $data = $this->makeRequest('/recentgames', ['uuid' => $uuid->serialize()]);
@@ -223,12 +223,11 @@ class Hypixel
      * Get a player's status
      *
      * @param UuidInterface|null $uuid
-     * @return array
+     * @return Session|null
      * @throws Exception
      */
-    public function getStatus(UuidInterface $uuid = null): array {
-        if ($uuid === null)
-            $uuid = $this->getPlayersUuid();
+    public function getStatus(UuidInterface $uuid = null): ?Session {
+        $this->orDefaultUuid($uuid);
 
         return Cache::get('hypixel.status.' . $uuid->serialize(), function () use ($uuid) {
             $data = $this->makeRequest('/status', ['uuid' => $uuid->serialize()]);
@@ -278,9 +277,74 @@ class Hypixel
     }
 
     /**
+     * Get ranked skywars stats
+     *
+     * @param UuidInterface $uuid
+     * @return RankedSkywarsStats|null
+     * @throws Exception
+     */
+    public function getRankedSkywarsStats(UuidInterface $uuid): ?RankedSkywarsStats {
+        $this->orDefaultUuid($uuid);
+
+        return Cache::get('hypixel.skywars.ranked.' . $uuid->serialize(), function () use ($uuid) {
+            $data = $this->makeRequest('/player/ranked/skywars', ['uuid' => $uuid]);
+
+            if ($data == null)
+                return null;
+
+            $data = $data['result'];
+
+            $ranked = new RankedSkywarsStats();
+            $ranked->fromArray($data);
+            Cache::put('hypixel.skywars.ranked.' . $uuid->serialize(), $ranked, ttl: 120);
+            return $ranked;
+        });
+    }
+
+    /**
+     * @return Achievements|null
+     */
+    public function getAchievements(): ?Achievements {
+        return Cache::get('hypixel.achievements', function () {
+            $data = $this->makeRequest('/resources/achievements');
+
+            if ($data === null)
+                return null;
+
+            $data = $data['achievements'];
+            $achievements = new Achievements();
+            $achievements->parseGames($data);
+
+            Cache::put('hypixel.achievements', $achievements, 3600);
+            return $achievements;
+        });
+    }
+
+    public function getChallenges(): ?Challenges {
+        return Cache::get('hypixel.challenges', function () {
+            $data = $this->makeRequest('/resources/challenges');
+
+            if ($data === null)
+                return null;
+
+            $data = $data['challenges'];
+            $challenges = new Challenges();
+            $challenges->parseGames($data);
+
+            Cache::put('hypixel.challenges', $challenges, 3600);
+            return $challenges;
+        });
+    }
+
+    private function orDefaultUuid(?UuidInterface &$uuid) {
+        if ($uuid === null)
+            $uuid = $this->getPlayersUuid();
+    }
+
+    /**
      * @throws RateLimitException
      */
-    private function makeRequest(string $path, array $query = []): array {
+    private function makeRequest(string $path, array $query = []): ?array {
         if (RateLimiter::remaining('hypixel:request:' . $this->getApiKey(), $perMinute = 120)) {
             RateLimiter::hit('hypixel:request:' . $this->getApiKey());
 
@@ -292,6 +356,10 @@ class Hypixel
             if ($response->status() === 403) {
                 $event = new InvalidApiKeyEvent($this);
                 Event::dispatch($event);
+            }
+
+            if ($response->status() !== 200) {
+                return null;
             }
 
             echo json_encode($response->json());

@@ -20,9 +20,15 @@ trait FromArray
     public function fromArray(array $array): void
     {
         foreach ($array as $key => $value) {
+            $classRef = new \ReflectionClass($this);
+            foreach ($classRef->getMethods() as $method) {
+                if (strtolower($method->name) === 'parse' . strtolower($key)) {
+                    $method->invoke($this, $value);
+                    continue 2;
+                }
+            }
             if (property_exists(static::class, $key)) {
                 $ref = new ReflectionProperty(static::class, $key);
-
 
                 switch ($ref->getType()->getName()) {
                     case 'Ramsey\Uuid\UuidInterface':
